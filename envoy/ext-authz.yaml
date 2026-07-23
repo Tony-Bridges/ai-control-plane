@@ -1,0 +1,24 @@
+apiVersion: envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+transport_api_version: V3
+with_request_body:
+  max_request_bytes: 10240
+grpc_service:
+  envoy_grpc:
+    cluster_name: ext_authz_cluster
+failure_mode_allow: false
+clear_route_cache: false
+allowed_headers:
+  patterns:
+    - exact: "x-user-id"
+    - exact: "x-department"
+    - exact: "x-request-id"
+    - exact: "x-b3-traceid"
+    - exact: "x-b3-spanid"
+    - exact: "x-b3-parentspanid"
+    - exact: "x-b3-sampled"
+    - exact: "x-b3-flags"
+    - exact: "x-ot-span-context"
+headers_to_set:
+  - header:
+      key: "x-envoy-auth"
+      value: "authorized"

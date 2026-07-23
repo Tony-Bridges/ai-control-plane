@@ -1,0 +1,212 @@
+version: '3.8'
+
+services:
+  # Envoy Gateway
+  envoy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.envoy
+    ports:
+      - "8080:8080"      # Main HTTP
+      - "9901:9901"      # Admin
+    volumes:
+      - ../envoy:/etc/envoy
+      - envoy_logs:/tmp
+    depends_on:
+      - control-plane
+      - opa
+      - ratelimit
+    networks:
+      - ai_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Control Plane
+  control-plane:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OPA_URL=http://opa:8181
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=aiaudit
+      - POSTGRES_USER=audit_user
+      - POSTGRES_PASSWORD=audit_pass
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - postgres
+      - clickhouse
+      - opa
+    volumes:
+      - ../logs:/app/logs
+      - ../config:/app/config:ro
+    networks:
+      - ai_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # Open Policy Agent
+  opa:
+    image: openpolicyagent/opa:latest
+    command: run --server --addr=:8181 --log-level=info
+    ports:
+      - "8181:8181"
+    volumes:
+      - ../config/policies:/policies:ro
+    environment:
+      - OPA_CONFIG=/policies/config.yaml
+    networks:
+      - ai_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Rate Limiting Service
+  ratelimit:
+    image: envoyproxy/ratelimit:latest
+    command: |
+      -config /data/ratelimit/config.yaml
+      -statsd-udp localhost:8125
+    ports:
+      - "8081:8081"      # gRPC
+      - "8082:8082"      # HTTP
+    volumes:
+      - ../envoy/ratelimit.yaml:/data/ratelimit/config.yaml
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+  # Redis (Caching + Rate Limiting)
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # PostgreSQL (Audit Storage)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=audit_user
+      - POSTGRES_PASSWORD=audit_pass
+      - POSTGRES_DB=aiaudit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ai_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ClickHouse (Analytics)
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"      # HTTP
+      - "9000:9000"      # Native
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      - CLICKHOUSE_DB=aiaudit
+      - CLICKHOUSE_USER=audit_user
+      - CLICKHOUSE_PASSWORD=audit_pass
+    networks:
+      - ai_network
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+  # Grafana (Dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/ai_control_plane.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../config/grafana:/etc/grafana:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+networks:
+  ai_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis_data:
+  postgres_data:
+  clickhouse_data:
+  prometheus_data:
+  grafana_data:
+  envoy_logs:

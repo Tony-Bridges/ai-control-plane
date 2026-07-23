@@ -1,0 +1,20 @@
+FROM envoyproxy/envoy:v1.28-latest
+
+# Copy Envoy configuration
+COPY envoy/envoy.yaml /etc/envoy/envoy.yaml
+COPY envoy/ratelimit.yaml /etc/envoy/ratelimit.yaml
+COPY envoy/ext-authz.yaml /etc/envoy/ext-authz.yaml
+
+# Create dynamic config directory
+RUN mkdir -p /etc/envoy/dynamic
+
+# Set environment variables
+ENV ENVOY_UID=0
+ENV ENVOY_GID=0
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:9901/health || exit 1
+
+# Run Envoy
+CMD ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]

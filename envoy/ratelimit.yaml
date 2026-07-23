@@ -1,0 +1,33 @@
+domain: ai_gateway
+descriptors:
+  - key: generic_key
+    value: ai_requests
+    rate_limit:
+      unit: second
+      requests_per_unit: 100
+    descriptors:
+      - key: remote_address
+        rate_limit:
+          unit: minute
+          requests_per_unit: 60
+      - key: header_value_match
+        value: premium_user
+        rate_limit:
+          unit: second
+          requests_per_unit: 200
+
+  - key: path
+    rate_limit:
+      unit: minute
+      requests_per_unit: 1000
+    descriptors:
+      - key: method
+        value: POST
+        rate_limit:
+          unit: second
+          requests_per_unit: 50
+
+  - key: user_agent
+    rate_limit:
+      unit: minute
+      requests_per_unit: 500

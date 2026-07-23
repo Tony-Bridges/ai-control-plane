@@ -1,0 +1,959 @@
+AI Control Plane - Complete Documentation
+📚 Table of Contents
+Overview
+
+Architecture
+
+Installation
+
+Configuration
+
+API Reference
+
+Policy Management
+
+Dashboard Guide
+
+Deployment
+
+Troubleshooting
+
+Contributing
+
+1. Overview {#overview}
+What is AI Control Plane?
+AI Control Plane is a centralized policy and routing engine for AI services that provides:
+
+🛡️ Data Privacy Protection - Automatically detects and redacts PII (Personal Identifiable Information)
+
+🎯 Smart AI Routing - Routes requests to the optimal AI provider based on cost, performance, and capabilities
+
+🔒 Security Policy Enforcement - Enforces access control and compliance policies
+
+📊 Unified Analytics - Centralized monitoring and auditing of all AI requests
+
+Key Features
+Feature	Description
+PII Detection	Automatically identifies and masks sensitive data (ID numbers, emails, phone numbers)
+Multi-Provider Support	Works with OpenAI, Anthropic, Google AI, and local models (Llama, etc.)
+Policy Engine	OPA-based policy enforcement for access control and compliance
+Visual Dashboard	Streamlit-based UI for policy management and monitoring
+REST API	Full REST API for integration with existing systems
+Rate Limiting	Per-tenant rate limiting to prevent abuse
+Audit Logging	Complete audit trail of all requests and decisions
+Use Cases
+Enterprise AI Gateway - Secure gateway for AI services in regulated industries
+
+SaaS Multi-Tenant - Isolated AI access for multi-tenant applications
+
+Compliance & Privacy - GDPR, POPIA, HIPAA compliance for AI usage
+
+Cost Optimization - Smart routing to reduce AI costs
+
+Security Layer - Additional security layer for AI services
+
+2. Architecture {#architecture}
+System Architecture
+text
+┌─────────────────────────────────────────────────────────────┐
+│                     External Clients                         │
+│                  (Web, Mobile, API)                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    FastAPI Application                       │
+│                   (src/main.py)                              │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │              Middleware Layer                       │     │
+│  │  • TenantMiddleware                                 │     │
+│  │  • RequestIDMiddleware                              │     │
+│  │  • RateLimitMiddleware                              │     │
+│  │  • LoggingMiddleware                                │     │
+│  │  • MetricsMiddleware                                │     │
+│  └────────────────────────────────────────────────────┘     │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │               API Routes                            │     │
+│  │  • /api/v1/classify    - Text classification      │     │
+│  │  • /api/v1/policy      - Policy evaluation        │     │
+│  │  • /api/v1/route       - AI routing              │     │
+│  │  • /api/v1/policies    - Policy management        │     │
+│  └────────────────────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   OPA        │    │  AI Providers │    │  Database    │
+│   Policy     │    │  • OpenAI    │    │  PostgreSQL  │
+│   Engine     │    │  • Anthropic │    │  (Optional)  │
+│              │    │  • Google    │    │              │
+│              │    │  • Local     │    │              │
+└──────────────┘    └──────────────┘    └──────────────┘
+Component Overview
+Component	Description	Technology
+API Gateway	Main entry point for all requests	FastAPI
+Policy Engine	Evaluates security and compliance policies	OPA (Open Policy Agent)
+Classification Engine	Detects PII and classifies content	spaCy + Custom Recognizers
+AI Router	Routes requests to appropriate AI providers	Custom + Provider APIs
+Dashboard	Visual management interface	Streamlit
+Database	Stores policies, logs, and configurations	PostgreSQL (Optional)
+Cache	Caches frequent requests for performance	Redis (Optional)
+3. Installation {#installation}
+Prerequisites
+Python 3.10+
+
+pip
+
+(Optional) PostgreSQL 14+
+
+(Optional) Redis 6+
+
+(Optional) OPA 0.50+
+
+Quick Start
+bash
+# Clone the repository
+git clone https://github.com/yourusername/ai-control-plane.git
+cd ai-control-plane
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download spaCy model
+python -m spacy download en_core_web_lg
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# Run the application
+uvicorn src.main:app --reload
+Requirements File
+txt
+# requirements.txt
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+requests==2.31.0
+python-dotenv==1.0.0
+spacy==3.7.2
+presidio-analyzer==2.2.0
+presidio-anonymizer==2.2.0
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+asyncpg==0.29.0
+redis==5.0.1
+4. Configuration {#configuration}
+Environment Variables
+Create a .env file in the root directory:
+
+bash
+# ============ APPLICATION ============
+APP_NAME=AI Control Plane
+DEBUG=true
+SECRET_KEY=your-secret-key-here-change-in-production
+LOG_LEVEL=INFO
+
+# ============ DATABASE ============
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=ai_control_plane
+DB_USER=postgres
+DB_PASSWORD=your-password
+
+# ============ REDIS ============
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
+# ============ OPA ============
+OPA_URL=http://localhost:8181
+
+# ============ AI PROVIDERS ============
+# OpenAI
+OPENAI_ENDPOINT=https://api.openai.com/v1
+OPENAI_API_KEY=your-openai-api-key
+DEFAULT_MODEL=gpt-4
+FALLBACK_MODEL=gpt-3.5-turbo
+
+# Anthropic
+ANTHROPIC_ENDPOINT=https://api.anthropic.com/v1
+ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_DEFAULT_MODEL=claude-3-opus-20240229
+
+# Google AI
+GOOGLE_ENDPOINT=https://generativelanguage.googleapis.com/v1
+GOOGLE_API_KEY=your-google-api-key
+
+# Local Models (Ollama)
+LOCAL_LLAMA_ENDPOINT=http://localhost:11434/api
+LOCAL_LLAMA_MODEL=llama2
+
+# ============ CORS ============
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000
+
+# ============ RATE LIMITING ============
+RATE_LIMIT_REQUESTS=60
+RATE_LIMIT_WINDOW=60
+Configuration File
+Alternatively, use config.yaml:
+
+yaml
+# config.yaml
+application:
+  name: AI Control Plane
+  debug: true
+  secret_key: your-secret-key
+
+database:
+  host: localhost
+  port: 5432
+  name: ai_control_plane
+  user: postgres
+  password: your-password
+
+ai_providers:
+  openai:
+    endpoint: https://api.openai.com/v1
+    api_key: your-key
+    default_model: gpt-4
+  anthropic:
+    endpoint: https://api.anthropic.com/v1
+    api_key: your-key
+    default_model: claude-3-opus-20240229
+
+policies:
+  opa_url: http://localhost:8181
+  auto_reload: true
+
+rate_limiting:
+  requests_per_minute: 60
+5. API Reference {#api-reference}
+Base URL
+text
+http://localhost:8000/api/v1
+Authentication
+Currently, the API uses tenant-based authentication via headers:
+
+http
+X-Tenant-ID: your-tenant-id
+Endpoints
+1. Health Check
+http
+GET /health
+Response:
+
+json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+2. Text Classification
+http
+POST /classify
+Request:
+
+json
+{
+  "text": "My ID is 8001015009087",
+  "tenant_id": "tenant-001"
+}
+Response:
+
+json
+{
+  "classification": "sensitive",
+  "detected_entities": [
+    {
+      "type": "SA_ID",
+      "value": "8001015009087",
+      "score": 0.95
+    }
+  ],
+  "redacted_text": "My ID is [REDACTED]",
+  "risk_score": 0.85
+}
+3. Policy Evaluation
+http
+POST /policy/evaluate
+Request:
+
+json
+{
+  "package": "privacy",
+  "rule": "allow",
+  "input": {
+    "text": "Customer data: 8001015009087",
+    "user": {
+      "role": "admin",
+      "tenant": "tenant-001"
+    }
+  }
+}
+Response:
+
+json
+{
+  "allowed": false,
+  "reason": "PII detected",
+  "decision_time_ms": 2.3
+}
+4. AI Routing
+http
+POST /route
+Request:
+
+json
+{
+  "query": "Explain quantum computing",
+  "preferred_provider": "openai",
+  "model": "gpt-4",
+  "tenant_id": "tenant-001"
+}
+Response:
+
+json
+{
+  "response": "Quantum computing is a type of computation...",
+  "provider": "openai",
+  "model": "gpt-4",
+  "tokens_used": 150,
+  "cost": 0.003,
+  "processing_time_ms": 1200
+}
+5. Policy Management
+http
+GET /policies
+Response:
+
+json
+[
+  {
+    "id": "privacy.rego",
+    "name": "privacy",
+    "package": "privacy",
+    "enabled": true,
+    "content": "package privacy\n\nallow {\n    not contains_pii(input.text)\n}",
+    "created": 1705312800,
+    "updated": 1705312800
+  }
+]
+http
+POST /policies
+Request:
+
+json
+{
+  "name": "data_privacy",
+  "package": "privacy",
+  "content": "package privacy\n\nallow {\n    not contains_pii(input.text)\n}",
+  "enabled": true,
+  "description": "Block requests with PII"
+}
+http
+DELETE /policies/{policy_id}
+Error Codes
+Code	Description
+400	Bad Request - Invalid input
+401	Unauthorized - Missing tenant ID
+403	Forbidden - Policy denied access
+404	Not Found - Resource not found
+429	Too Many Requests - Rate limit exceeded
+500	Internal Server Error
+6. Policy Management {#policy-management}
+OPA Policy Language
+Policies are written in Rego, OPA's policy language.
+
+Policy Structure
+rego
+package privacy
+
+# Default allow
+default allow = true
+
+# Block requests with PII
+allow {
+    not contains_pii(input.text)
+}
+
+# PII detection rules
+contains_pii(text) {
+    contains_id_number(text)
+}
+
+contains_pii(text) {
+    contains_email(text)
+}
+
+# South African ID
+contains_id_number(text) {
+    regex.match("\\b\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?\\d{3}\\s?\\d{1}\\b", text)
+}
+
+# Email detection
+contains_email(text) {
+    regex.match("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b", text)
+}
+Common Policy Examples
+Access Control
+rego
+package access
+
+allow_access(user, resource) {
+    user.role == "admin"
+}
+
+allow_access(user, resource) {
+    user.role == "manager"
+    resource.department == user.department
+}
+
+allow_access(user, resource) {
+    user.role == "viewer"
+    resource.public == true
+}
+Rate Limiting
+rego
+package ratelimit
+
+max_requests = 60
+
+allow {
+    count(input.requests_in_minute) < max_requests
+}
+Data Classification
+rego
+package classification
+
+classify_text(text) = "sensitive" {
+    contains_pii(text)
+}
+
+classify_text(text) = "public" {
+    not contains_pii(text)
+}
+Policy Testing
+Using the dashboard:
+
+Go to Test Policy tab
+
+Select a policy
+
+Enter test input
+
+View results
+
+Using curl:
+
+bash
+curl -X POST http://localhost:8181/v1/data/privacy/allow \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"text": "My ID is 8001015009087"}}'
+7. Dashboard Guide {#dashboard-guide}
+Accessing the Dashboard
+bash
+streamlit run policy_dashboard.py
+Open: http://localhost:8501
+
+Dashboard Sections
+📊 Dashboard
+Overview Metrics: Total policies, active policies, packages
+
+Recent Activity: Latest policy changes
+
+Quick Actions: View, edit, test policies
+
+📋 Policy List
+Search: Find policies by name or package
+
+Filters: Filter by status or package
+
+Actions: View, edit, delete policies
+
+Policy Cards: Detailed view of each policy
+
+➕ Create Policy
+Visual Builder: Build policies with templates
+
+Rule Builder: Select rule types (Access, Privacy, Rate Limit)
+
+Code Editor: Direct Rego editing
+
+Preview: See policy before saving
+
+🧪 Test Policy
+Policy Selection: Choose policy to test
+
+Test Templates: Pre-built test scenarios
+
+Custom Input: JSON-based testing
+
+Results: Visual pass/fail results
+
+📈 Analytics
+Metrics: Evaluation counts, block rates, response times
+
+Charts: Decision trends, PII detection types
+
+Violations: Recent policy violations
+
+Dashboard Screenshots
+(Screenshots would be inserted here)
+
+8. Deployment {#deployment}
+Docker Deployment
+Dockerfile
+dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN python -m spacy download en_core_web_lg
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+docker-compose.yml
+yaml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - OPA_URL=http://opa:8181
+    depends_on:
+      - postgres
+      - redis
+      - opa
+    volumes:
+      - ./policies:/app/policies
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=ai_control_plane
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  opa:
+    image: openpolicyagent/opa:latest
+    command: run --server --addr :8181
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies
+
+volumes:
+  postgres_data:
+Kubernetes Deployment
+deployment.yaml
+yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-control-plane
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-control-plane
+  template:
+    metadata:
+      labels:
+        app: ai-control-plane
+    spec:
+      containers:
+      - name: api
+        image: ai-control-plane:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: host
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: password
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+Production Checklist
+□ Set DEBUG=false
+□ Generate strong SECRET_KEY
+□ Enable HTTPS/SSL
+□ Set up proper authentication
+□ Configure logging to external system
+□ Set up monitoring (Prometheus/Grafana)
+□ Configure backup for database
+□ Set up CI/CD pipeline
+□ Run security audit
+□ Set up rate limiting
+□ Configure firewall rules
+9. Troubleshooting {#troubleshooting}
+Common Issues
+1. Application won't start
+bash
+# Check if port is in use
+lsof -i :8000
+
+# Check Python version
+python --version  # Should be 3.10+
+
+# Check dependencies
+pip list | grep -E "fastapi|uvicorn|spacy"
+2. Database connection errors
+bash
+# Check PostgreSQL is running
+brew services list | grep postgres
+
+# Test connection
+psql -h localhost -U postgres -d ai_control_plane
+
+# Reset database
+createdb ai_control_plane
+3. OPA errors
+bash
+# Check OPA is running
+curl http://localhost:8181/v1/data
+
+# Reload policies
+curl -X POST http://localhost:8181/v1/policies
+
+# Check OPA logs
+opa run --server --log-level debug
+4. Dashboard not connecting
+bash
+# Check API URL in sidebar
+# Should be: http://localhost:8000
+
+# Check CORS settings
+# Ensure allowed_origins includes http://localhost:8501
+
+# Restart dashboard
+streamlit run policy_dashboard.py
+5. PII not being detected
+python
+# Test spaCy model
+python -c "import spacy; nlp = spacy.load('en_core_web_lg'); print('ok')"
+
+# Check recognizers
+python -c "from src.detectors.classification_engine import ClassificationEngine; ce = ClassificationEngine(); print(ce.registry.recognizers)"
+Debug Mode
+Enable debug logging:
+
+bash
+# In .env
+DEBUG=true
+LOG_LEVEL=DEBUG
+
+# Or run with debug flag
+uvicorn src.main:app --reload --log-level debug
+Logs
+bash
+# View application logs
+tail -f logs/app.log
+
+# View uvicorn logs
+uvicorn src.main:app --reload --log-level info
+
+# Dashboard logs
+streamlit run policy_dashboard.py --logger.level=debug
+10. Contributing {#contributing}
+Development Setup
+bash
+# Clone repository
+git clone https://github.com/yourusername/ai-control-plane.git
+cd ai-control-plane
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Install pre-commit hooks
+pre-commit install
+
+# Run tests
+pytest tests/
+
+# Run linting
+black src/
+flake8 src/
+mypy src/
+Development Guidelines
+Code Style
+Follow PEP 8
+
+Use Black for formatting
+
+Add type hints
+
+Write docstrings
+
+Testing
+bash
+# Run all tests
+pytest
+
+# Run specific test
+pytest tests/test_policy.py
+
+# Run with coverage
+pytest --cov=src tests/
+Branch Strategy
+text
+main
+  ├── develop
+  │   ├── feature/feature-name
+  │   └── bugfix/bug-name
+  └── release/v1.0.0
+Pull Request Checklist
+□ Tests pass
+□ Code is documented
+□ No linter warnings
+□ Changes are backward compatible
+□ Added appropriate tests
+□ Updated documentation
+Adding New AI Providers
+Create provider class in src/providers/
+
+Add configuration in settings.py
+
+Register provider in src/routing/router.py
+
+Add tests
+
+Update documentation
+
+Example:
+
+python
+# src/providers/custom_provider.py
+class CustomProvider:
+    def __init__(self, api_key: str, endpoint: str):
+        self.api_key = api_key
+        self.endpoint = endpoint
+    
+    async def generate(self, prompt: str, **kwargs):
+        # Implementation
+        pass
+    
+    def get_cost(self, tokens: int):
+        # Cost calculation
+        pass
+11. API Status Codes
+Code	Description	Common Causes
+200	Success	Request completed successfully
+201	Created	Resource created successfully
+400	Bad Request	Invalid input format
+401	Unauthorized	Missing or invalid authentication
+403	Forbidden	Policy denied access
+404	Not Found	Resource doesn't exist
+429	Too Many Requests	Rate limit exceeded
+500	Internal Server Error	Server-side error
+12. Performance Optimization
+Caching Strategy
+python
+# Redis caching example
+@cache(ttl=300)  # Cache for 5 minutes
+async def get_classification(text: str):
+    # Expensive classification
+    return result
+Database Optimization
+sql
+-- Add indexes for performance
+CREATE INDEX idx_policies_tenant ON policies(tenant_id);
+CREATE INDEX idx_audit_tenant ON audit_logs(tenant_id);
+CREATE INDEX idx_audit_timestamp ON audit_logs(timestamp);
+Load Balancing
+nginx
+# nginx.conf
+upstream ai_control_plane {
+    server api1:8000;
+    server api2:8000;
+    server api3:8000;
+}
+
+server {
+    listen 80;
+    location / {
+        proxy_pass http://ai_control_plane;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+13. Security Best Practices
+API Security
+Use HTTPS in production
+
+Authentication: Implement JWT or API keys
+
+Rate Limiting: Prevent abuse
+
+Input Validation: Validate all inputs
+
+CORS: Configure properly
+
+Environment Variables: Never commit secrets
+
+Data Security
+Encrypt sensitive data at rest
+
+Redact PII in logs
+
+Regular security audits
+
+Dependency scanning
+
+Access control
+
+Example: API Key Authentication
+python
+# src/api/auth.py
+from fastapi import Security, HTTPException
+from fastapi.security import APIKeyHeader
+
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+async def validate_api_key(api_key: str = Security(api_key_header)):
+    if api_key != settings.API_KEY:
+        raise HTTPException(status_code=403)
+    return api_key
+14. Monitoring & Alerting
+Prometheus Metrics
+python
+# src/monitoring/metrics.py
+from prometheus_client import Counter, Histogram
+
+request_counter = Counter('requests_total', 'Total requests')
+request_duration = Histogram('request_duration_seconds', 'Request duration')
+policy_evaluations = Counter('policy_evaluations_total', 'Policy evaluations')
+
+@app.middleware("http")
+async def monitor_requests(request, call_next):
+    request_counter.inc()
+    start = time.time()
+    response = await call_next(request)
+    request_duration.observe(time.time() - start)
+    return response
+Grafana Dashboard
+json
+{
+  "dashboard": {
+    "title": "AI Control Plane Monitoring",
+    "panels": [
+      {
+        "title": "Request Rate",
+        "targets": [
+          {
+            "expr": "rate(requests_total[5m])"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "targets": [
+          {
+            "expr": "rate(requests_total{status=~\"5..\"}[5m])"
+          }
+        ]
+      }
+    ]
+  }
+}
+15. License
+MIT License - See LICENSE file for details.
+
+16. Support
+Documentation: https://docs.ai-control-plane.com
+
+GitHub: https://github.com/yourusername/ai-control-plane
+
+Issues: https://github.com/yourusername/ai-control-plane/issues
+
+Email: support@ai-control-plane.com
+
+Quick Reference Card
+Common Commands
+bash
+# Start API
+uvicorn src.main:app --reload
+
+# Start Dashboard
+streamlit run policy_dashboard.py
+
+# Start OPA
+opa run --server
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests
+pytest
+
+# Build Docker
+docker build -t ai-control-plane .
+
+# Run Docker
+docker-compose up
+Useful APIs
+bash
+# Health check
+curl http://localhost:8000/health
+
+# Classify text
+curl -X POST http://localhost:8000/api/v1/classify \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Your text here"}'
+
+# Evaluate policy
+curl -X POST http://localhost:8000/api/v1/policy/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"package": "main", "rule": "allow", "input": {}}'
+Documentation Version: 1.0.0
+Last Updated: January 2024
+Next Review: July 2024
